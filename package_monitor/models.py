@@ -110,8 +110,12 @@ class PackageVersion(models.Model):
         else:
             # HACK: we only take the first version.
             try:
-                self.current_version = Version.coerce(requirement.specs[0][1])
-                self.is_parseable = True
+                if requirement.specs:
+                    self.current_version = Version.coerce(requirement.specs[0][1])
+                    self.is_parseable = True
+                else:
+                    self.current_version = None
+                    self.is_parseable = False
             except ValueError as ex:
                 self.current_version = None
                 self.is_parseable = False
