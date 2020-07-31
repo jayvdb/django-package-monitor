@@ -88,12 +88,18 @@ class Package(object):
         data = cache.get(key)
         if data is None:
             logger.debug("Updating package info for %s from PyPI.", self.name)
-            data = requests.get(self.url).json()
+            data = requests.get(self.url)
+            try:
+                data = data.json()
+            except Exception:
+                logger.exception("Error decoding PyPI package info for %s.", self.name)
+                data = {}
             cache.set(key, data, PYPI_CACHE_EXPIRY)
+
         return data
 
     def info(self):
-        return self.data().get('info')
+        return self.data().get('info', {})
 
     def licence(self):
         return self.info().get('license') or '(unspecified)'
@@ -105,7 +111,7 @@ class Package(object):
         return parse_version(self.info().get('version'))
 
     def all_versions(self):
-        release_data = self.data().get('releases')
+        release_data = self.data().get('releases', {})
         versions = [parse_version(r) for r in list(release_data.keys())]
         return sorted([v for v in versions if v is not None])
 
