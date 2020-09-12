@@ -92,7 +92,8 @@ class Package(object):
             try:
                 data = data.json()
             except Exception:
-                logger.exception("Error decoding PyPI package info for %s.", self.name)
+                logger.exception(
+                    "Error decoding PyPI package info for {}: {!r}".format(self.name, data))
                 data = {}
             cache.set(key, data, PYPI_CACHE_EXPIRY)
 
