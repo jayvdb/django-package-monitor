@@ -18,31 +18,41 @@ from ...settings import REQUIREMENTS_FILE
 logger = getLogger(__name__)
 
 
-def create_package_version(requirement: Requirement) -> None:
+def create_package_version(requirement: Requirement) -> PackageVersion:
     """Create a new PackageVersion from a requirement. Handles errors."""
     try:
-        PackageVersion(requirement=requirement).save()
+        pv = PackageVersion(requirement=requirement).save()
         logger.info("Package '%s' added.", requirement.name)  # noqa
     except IntegrityError:
         logger.info("Package '%s' already exists.", requirement.name)  # noqa
+        pv = PackageVersion.objects.get(package_name=requirement.name)
+    return pv
 
 
-def local() -> None:
+def local() -> List[PackageVersion]:
     """Load local requirements file."""
     logger.info("Loading requirements from local file.")
+    packages = []
     with open(REQUIREMENTS_FILE, "r") as f:
         requirements = parse(f)
         for r in requirements:
             logger.debug("Creating new package: %r", r)
-            create_package_version(r)
+            pv = create_package_version(r)
+            packages.append(pv)
+
+    return packages
 
 
-def remote() -> Dict[str, List]:
+def remote(packages: List[PackageVersion] = None) -> Dict[str, List]:
     """Update package info from PyPI."""
     logger.info("Fetching latest data from PyPI.")
     results = defaultdict(list)
-    packages = PackageVersion.objects.exclude(is_editable=True)
-    for pv in packages:
+    if not packages:
+        packages = PackageVersion.objects.exclude(is_editable=True)
+    for pv in packages:  # type: ignore
+        if pv.is_editable:
+            logger.debug("Skipping editable package from PyPI: %r", pv)
+            continue
         pv.update_from_pypi()
         results[pv.diff_status].append(pv)
         logger.debug("Updated package from PyPI: %r", pv)
@@ -102,11 +112,12 @@ class Command(BaseCommand):
         if options["clean"]:
             clean()
 
+        packages = []
         if options["local"]:
-            local()
+            packages = local()
 
         if options["remote"]:
-            results = remote()
+            results = remote(packages)
             if options["notify"]:
                 send_mail(
                     options["subject"],
