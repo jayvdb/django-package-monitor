@@ -19,8 +19,9 @@ logger = getLogger(__name__)
 def create_package_version(requirement):
     """Create a new PackageVersion from a requirement. Handles errors."""
     try:
-        PackageVersion(requirement=requirement).save()
+        pv = PackageVersion(requirement=requirement).save()
         logger.info("Package '%s' added.", requirement.name)  # noqa
+        return pv
     except IntegrityError:
         logger.info("Package '%s' already exists.", requirement.name)  # noqa
 
@@ -28,19 +29,29 @@ def create_package_version(requirement):
 def local():
     """Load local requirements file."""
     logger.info("Loading requirements from local file.")
+    packages = []
     with open(REQUIREMENTS_FILE, 'r') as f:
         requirements = parse(f)
         for r in requirements:
             logger.debug("Creating new package: %r", r)
-            create_package_version(r)
+            pv = create_package_version(r)
+            if not pv:
+                pv = PackageVersion.objects.get(package_name=r.name)
+            packages.append(pv)
+
+    return packages
 
 
-def remote():
+def remote(packages=None):
     """Update package info from PyPI."""
     logger.info("Fetching latest data from PyPI.")
     results = defaultdict(list)
-    packages = PackageVersion.objects.exclude(is_editable=True)
+    if not packages:
+        packages = PackageVersion.objects.exclude(is_editable=True)
     for pv in packages:
+        if pv.is_editable:
+            logger.debug("Skipping editable package from PyPI: %r", pv)
+            continue
         pv.update_from_pypi()
         results[pv.diff_status].append(pv)
         logger.debug("Updated package from PyPI: %r", pv)
@@ -103,11 +114,13 @@ class Command(BaseCommand):
         if options['clean']:
             clean()
 
+        packages = []
+
         if options['local']:
-            local()
+            packages = local()
 
         if options['remote']:
-            results = remote()
+            results = remote(packages)
             render = lambda t: render_to_string(t, results)
             if options['notify']:
                 send_mail(
