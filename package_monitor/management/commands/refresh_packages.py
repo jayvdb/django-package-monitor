@@ -36,7 +36,12 @@ def local():
             logger.debug("Creating new package: %r", r)
             pv = create_package_version(r)
             if not pv:
-                pv = PackageVersion.objects.get(package_name=r.name)
+                name = r.name or r.uri
+                try:
+                    pv = PackageVersion.objects.get(package_name=name)
+                except PackageVersion.DoesNotExist:
+                    logger.error("Skipping missing package: %r", r)
+                    continue
             packages.append(pv)
 
     return packages
@@ -52,9 +57,12 @@ def remote(packages=None):
         if pv.is_editable:
             logger.debug("Skipping editable package from PyPI: %r", pv)
             continue
-        pv.update_from_pypi()
-        results[pv.diff_status].append(pv)
-        logger.debug("Updated package from PyPI: %r", pv)
+        try:
+            pv.update_from_pypi()
+            results[pv.diff_status].append(pv)
+            logger.debug("Updated package from PyPI: %r", pv)
+        except Exception as e:
+            logger.error('{}: {}'.format(pv, e))
     results['refreshed_at'] = tz_now()
     return results
 

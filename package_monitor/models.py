@@ -102,8 +102,16 @@ class PackageVersion(models.Model):
         if requirement is None:
             return
         self.raw = requirement.line
-        self.package_name = requirement.name
         self.is_editable = requirement.editable
+        if not requirement.name:
+            assert requirement.uri, '{} name must not be null'.format(requirement)
+            self.package_name = requirement.uri
+            self.is_parseable = False
+            self.url = ''
+            self.current_version = None
+            return
+
+        self.package_name = requirement.name
         if requirement.editable:
             self.url = ''
             self.current_version = None
@@ -116,6 +124,12 @@ class PackageVersion(models.Model):
                 else:
                     self.current_version = None
                     self.is_parseable = False
+            except IndexError as ex:
+                self.current_version = None
+                self.is_parseable = False
+                logger.debug(
+                    "Unparseable package version (%s): %s", requirement.specs, ex
+                )
             except ValueError as ex:
                 self.current_version = None
                 self.is_parseable = False
