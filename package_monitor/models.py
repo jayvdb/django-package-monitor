@@ -148,8 +148,8 @@ class PackageVersion(models.Model):
     def update_from_pypi(self):
         """Call get_latest_version and then save the object."""
         package = pypi.Package(self.package_name)
-        self.licence = package.licence()
         if self.is_parseable:
+            self.licence = package.licence()
             self.latest_version = package.latest_version()
             self.next_version = package.next_version(self.current_version)
             self.diff_status = pypi.version_diff(self.current_version, self.latest_version)
